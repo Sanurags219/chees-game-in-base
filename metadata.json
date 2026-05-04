@@ -1,6 +1,6 @@
 {
-  "name": "",
-  "description": "",
+  "name": "BaseChess",
+  "description": "A 10-level on-chain chess challenge on Base.",
   "requestFramePermissions": [],
   "majorCapabilities": []
 }
