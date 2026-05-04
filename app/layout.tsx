@@ -1,15 +1,37 @@
 import type {Metadata} from 'next';
-import './globals.css'; // Global styles
+import './globals.css';
+import { Providers } from './providers';
 
-export const metadata: Metadata = {
-  title: 'My Google AI Studio App',
-  description: 'My Google AI Studio App',
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const appUrl = process.env.APP_URL || 'https://ais-dev-nql373fydx2jsoswwhvbxm-615601803900.asia-southeast1.run.app';
+  return {
+    title: 'BaseChess',
+    description: 'On-chain chess on Base',
+    other: {
+      'fc:miniapp': JSON.stringify({
+        version: 'next',
+        imageUrl: `${appUrl}/og-image.png`,
+        button: {
+          title: 'Launch BaseChess',
+          action: {
+            type: 'launch_miniapp',
+            name: 'BaseChess',
+            url: appUrl,
+            splashImageUrl: `${appUrl}/splash.png`,
+            splashBackgroundColor: '#0A0A0A',
+          },
+        },
+      }),
+    },
+  };
+}
 
 export default function RootLayout({children}: {children: React.ReactNode}) {
   return (
     <html lang="en">
-      <body suppressHydrationWarning>{children}</body>
+      <body suppressHydrationWarning className="bg-[#0A0A0A]">
+        <Providers>{children}</Providers>
+      </body>
     </html>
   );
 }
