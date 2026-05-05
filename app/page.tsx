@@ -58,10 +58,16 @@ export default function ChessPage() {
       const result = game.move(move);
       if (result) {
         if (result.captured) {
+          let captureSquare = result.to;
+          if (result.flags.includes('e')) {
+            // En Passant: captured pawn is on the rank of the attacker's original square
+            captureSquare = result.to.charAt(0) + result.from.charAt(1);
+          }
+
           setCapturedPiece({ 
             type: result.captured, 
             color: result.color === 'w' ? 'b' : 'w',
-            square: result.to 
+            square: captureSquare 
           });
           setTimeout(() => setCapturedPiece(null), 1000);
         }
@@ -119,9 +125,9 @@ export default function ChessPage() {
       }
 
       const moves = game.moves({ square: selectedSquare as Square, verbose: true });
-      const isValidMove = moves.some(m => m.to === square);
+      const moveCandidate = moves.find(m => m.to === square);
 
-      if (!isValidMove) {
+      if (!moveCandidate) {
         const pieceAtDest = game.get(square as Square);
         if (pieceAtDest && pieceAtDest.color === 'w') {
           setSelectedSquare(square);
