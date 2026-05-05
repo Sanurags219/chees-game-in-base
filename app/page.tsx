@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useMemo, useCallback } from 'react';
-import { Chess } from 'chess.js';
+import { Chess, type Square } from 'chess.js';
 import { sdk } from '@farcaster/miniapp-sdk';
 import { motion, AnimatePresence } from 'motion/react';
 import { getBestMove } from '@/lib/chess';
@@ -12,15 +12,13 @@ import {
   Flag,
   CircleCheck,
   CircleAlert,
-  CircleX,
   Check,
   X,
-  Loader2,
-  ChevronRight,
   ShieldCheck,
   Clock,
   User,
-  Cpu
+  Cpu,
+  Settings2
 } from 'lucide-react';
 import { ConnectWallet, Wallet, WalletDropdown, WalletDropdownDisconnect } from '@coinbase/onchainkit/wallet';
 import { useAccount } from 'wagmi';
@@ -29,7 +27,7 @@ import { cn } from '@/lib/utils';
 export default function ChessPage() {
   const { address, isConnected } = useAccount();
   const [game, setGame] = useState(new Chess());
-  const [level, setLevel] = useState(1);
+  const [level, setLevel] = useState(5); // Default to middle
   const [moveHistory, setMoveHistory] = useState<{ san: string; from: string; to: string }[]>([]);
   const [status, setStatus] = useState<'playing' | 'checkmate' | 'draw' | 'resigned'>('playing');
   const [isAiThinking, setIsAiThinking] = useState(false);
@@ -60,7 +58,7 @@ export default function ChessPage() {
         setGame(new Chess(game.fen()));
         setMoveHistory(prev => [...prev, { san: result.san, from: result.from, to: result.to }]);
         setErrorMessage(null);
-        setDeniedAiMoves([]); // Clear denied moves on successful move
+        setDeniedAiMoves([]); 
         
         if (game.isCheckmate()) setStatus('checkmate');
         else if (game.isDraw()) setStatus('draw');
@@ -77,7 +75,7 @@ export default function ChessPage() {
   }, [game]);
 
   const handleAiMove = useCallback(() => {
-    if (status !== 'playing') return;
+    if (status !== 'playing' || proposedAiMove) return;
     
     // Simulate thinking delay
     setTimeout(() => {
@@ -87,47 +85,31 @@ export default function ChessPage() {
         if (bestMove) {
           setProposedAiMove(bestMove);
         } else if (deniedAiMoves.length > 0) {
-          // If all proposed moves were denied, AI gives up or forced to move
           setErrorMessage("All AI suggestions rejected. Bot forced to move.");
           setDeniedAiMoves([]);
+          // Implicitly handleAiMove will trigger again next turn check or we can just wait
         }
         setIsAiThinking(false);
       }, 800 + Math.random() * 1000);
     }, 10);
-  }, [game, level, status, deniedAiMoves]);
-
-  const confirmAiMove = () => {
-    if (proposedAiMove) {
-      makeMove(proposedAiMove);
-      setProposedAiMove(null);
-    }
-  };
-
-  const denyAiMove = () => {
-    if (proposedAiMove) {
-      setDeniedAiMoves(prev => [...prev, proposedAiMove]);
-    }
-    setProposedAiMove(null);
-    setErrorMessage("AI move rejected. Bot is reconsidering...");
-  };
+  }, [game, level, status, deniedAiMoves, proposedAiMove]);
 
   useEffect(() => {
-    if (!isPlayerTurn && status === 'playing') {
+    if (!isPlayerTurn && status === 'playing' && !proposedAiMove && !isAiThinking) {
       handleAiMove();
     }
-  }, [isPlayerTurn, handleAiMove, status]);
+  }, [isPlayerTurn, handleAiMove, status, proposedAiMove, isAiThinking]);
 
   const onSquareClick = (square: string) => {
-    if (!isPlayerTurn || status !== 'playing') return;
+    if (!isPlayerTurn || status !== 'playing' || proposedAiMove) return;
 
     if (selectedSquare) {
-      // Check if move is a promotion
-      const piece = game.get(selectedSquare as any);
+      // Check for promotion
+      const piece = game.get(selectedSquare as Square);
       const isPawn = piece?.type === 'p';
       const isPromotionRank = (piece?.color === 'w' && square[1] === '8') || (piece?.color === 'b' && square[1] === '1');
       
-      // Verify if it's a valid move first
-      const moves = game.moves({ square: selectedSquare as any, verbose: true });
+      const moves = game.moves({ square: selectedSquare as Square, verbose: true });
       const isValidMove = moves.some(m => m.to === square);
 
       if (isValidMove && isPawn && isPromotionRank) {
@@ -141,7 +123,7 @@ export default function ChessPage() {
       if (moveSuccess) return;
     }
 
-    const piece = game.get(square as any);
+    const piece = game.get(square as Square);
     if (piece && piece.color === 'w') {
       setSelectedSquare(square);
     } else {
@@ -161,11 +143,41 @@ export default function ChessPage() {
     }
   };
 
+  const confirmAiMove = () => {
+    if (proposedAiMove) {
+      makeMove(proposedAiMove);
+      setProposedAiMove(null);
+    }
+  };
+
+  const denyAiMove = () => {
+    if (proposedAiMove) {
+      setDeniedAiMoves(prev => [...prev, proposedAiMove]);
+    }
+    setProposedAiMove(null);
+    setErrorMessage("AI move rejected. Bot is reconsidering...");
+  };
+
   const resetGame = () => {
     setGame(new Chess());
     setMoveHistory([]);
     setStatus('playing');
     setSelectedSquare(null);
+    setProposedAiMove(null);
+    setDeniedAiMoves([]);
+    setErrorMessage(null);
+  };
+
+  const getPieceUnicode = (type: string, color: string) => {
+    const pieces: any = {
+      p: color === 'w' ? '♙' : '♟',
+      r: color === 'w' ? '♖' : '♜',
+      n: color === 'w' ? '♘' : '♞',
+      b: color === 'w' ? '♗' : '♝',
+      q: color === 'w' ? '♕' : '♛',
+      k: color === 'w' ? '♔' : '♚'
+    };
+    return pieces[type];
   };
 
   const renderBoard = () => {
@@ -201,7 +213,6 @@ export default function ChessPage() {
                 {getPieceUnicode(piece.type, piece.color)}
               </span>
             )}
-            {/* Coordinate labels */}
             {c === 0 && <span className="absolute left-0.5 top-0.5 text-[8px] text-slate-500 font-bold uppercase">{8 - r}</span>}
             {r === 7 && <span className="absolute right-0.5 bottom-0.5 text-[8px] text-slate-500 font-bold uppercase">{String.fromCharCode(97 + c)}</span>}
           </div>
@@ -209,18 +220,6 @@ export default function ChessPage() {
       }
     }
     return squares;
-  };
-
-  const getPieceUnicode = (type: string, color: string) => {
-    const pieces: any = {
-      p: color === 'w' ? '♙' : '♟',
-      r: color === 'w' ? '♖' : '♜',
-      n: color === 'w' ? '♘' : '♞',
-      b: color === 'w' ? '♗' : '♝',
-      q: color === 'w' ? '♕' : '♛',
-      k: color === 'w' ? '♔' : '♚'
-    };
-    return pieces[type];
   };
 
   return (
@@ -231,7 +230,7 @@ export default function ChessPage() {
           <div className="w-8 h-8 bg-[#0052FF] rounded-full flex items-center justify-center">
             <Trophy className="w-4 h-4 text-white" />
           </div>
-          <h1 className="text-xl font-semibold tracking-tight text-white">BaseChess <span className="text-slate-500 font-normal ml-2">v1.0</span></h1>
+          <h1 className="text-xl font-semibold tracking-tight text-white">BaseChess <span className="text-slate-500 font-normal ml-2">v1.1</span></h1>
         </div>
         
         <div className="flex items-center gap-6">
@@ -255,28 +254,40 @@ export default function ChessPage() {
       </header>
 
       <main className="flex-1 flex overflow-hidden">
-        {/* Left Sidebar: Levels */}
+        {/* Left Sidebar: Levels Slider */}
         <aside className="w-64 border-r border-slate-800 bg-[#0D0D0D] p-6 flex flex-col">
           <div className="mb-6">
-            <h2 className="text-[10px] uppercase tracking-[0.2em] text-slate-500 font-bold mb-4 flex items-center gap-2">
-              <ShieldCheck className="w-3 h-3" /> Challenge Levels
+            <h2 className="text-[10px] uppercase tracking-[0.2em] text-slate-500 font-bold mb-6 flex items-center gap-2">
+              <Settings2 className="w-3 h-3" /> AI Difficulty
             </h2>
-            <div className="grid grid-cols-2 gap-2">
-              {[...Array(10)].map((_, i) => (
-                <button
-                  key={i}
-                  id={`level-btn-${i+1}`}
-                  onClick={() => setLevel(i + 1)}
-                  className={cn(
-                    "h-12 rounded font-bold transition-all duration-200 border",
-                    level === i + 1 
-                      ? "bg-[#0052FF] text-white border-blue-400 shadow-[0_0_15px_rgba(0,82,255,0.3)]" 
-                      : "bg-[#1A1A1A] border-slate-800 text-slate-500 hover:border-slate-600 hover:text-slate-300"
-                  )}
-                >
-                  L{String(i + 1).padStart(2, '0')}
-                </button>
-              ))}
+            
+            <div className="px-2">
+              <div className="flex justify-between items-center mb-4">
+                <span className="text-xs text-slate-400">Level</span>
+                <span className="text-2xl font-black text-blue-500">{level}</span>
+              </div>
+              <input 
+                type="range" 
+                min="1" 
+                max="10" 
+                step="1"
+                value={level}
+                onChange={(e) => setLevel(parseInt(e.target.value))}
+                className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-500"
+              />
+              <div className="flex justify-between text-[10px] text-slate-600 mt-2 font-bold px-1">
+                <span>NEWBIE</span>
+                <span>GM</span>
+              </div>
+            </div>
+            
+            <div className="mt-8 space-y-4">
+               <div className="p-4 bg-blue-500/5 rounded-xl border border-blue-500/10">
+                 <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-1">Bot Personality</p>
+                 <p className="text-sm font-bold text-white">
+                   {level <= 3 ? "Friendly BaseBot" : level <= 7 ? "Tactical AI" : "Grandmaster Bot"}
+                 </p>
+               </div>
             </div>
           </div>
           
@@ -284,7 +295,7 @@ export default function ChessPage() {
             <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-1">Win Reward</p>
             <p className="text-xl font-bold text-white">{(level * 0.05).toFixed(2)} ETH</p>
             <p className="text-[10px] text-blue-400 mt-2 flex items-center gap-1">
-               <Clock className="w-3 h-3" /> Rank: Grandmaster {level}
+               <Clock className="w-3 h-3" /> Rank: Level {level}
             </p>
           </div>
         </aside>
@@ -292,7 +303,7 @@ export default function ChessPage() {
         {/* Board Area */}
         <section className="flex-1 bg-[#0A0A0A] flex flex-col items-center justify-center p-8 relative">
           {/* Turn Indicator Overlay */}
-          <div className="mb-6 flex items-center justify-center w-full">
+          <div className="mb-6 flex items-center justify-center w-full relative h-10">
             <AnimatePresence mode="wait">
               <motion.div
                 key={isPlayerTurn ? 'player' : 'ai'}
@@ -324,7 +335,7 @@ export default function ChessPage() {
                   initial={{ opacity: 0, y: 10, scale: 0.9 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: -10, scale: 0.9 }}
-                  className="absolute mt-16 bg-red-500/10 border border-red-500 text-red-500 px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 shadow-[0_0_20px_rgba(239,68,68,0.2)] z-10"
+                  className="absolute top-12 bg-red-500/10 border border-red-500 text-red-500 px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 shadow-[0_0_20px_rgba(239,68,68,0.2)] z-10"
                 >
                   <CircleAlert className="w-3 h-3" />
                   {errorMessage}
@@ -334,44 +345,6 @@ export default function ChessPage() {
           </div>
 
           <div className="relative bg-[#1A1A1A] p-4 rounded-xl shadow-2xl border border-slate-800">
-            {/* Game Over Message */}
-            {status !== 'playing' && (
-              <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm rounded-xl">
-                <div className="bg-[#1A1A1A] border border-slate-800 p-8 rounded-2xl flex flex-col items-center text-center shadow-2xl max-w-xs">
-                  {status === 'checkmate' ? (
-                    <>
-                      <div className="w-16 h-16 bg-blue-500/20 rounded-full flex items-center justify-center mb-4">
-                        <CircleCheck className="w-8 h-8 text-blue-500" />
-                      </div>
-                      <h3 className="text-2xl font-bold text-white mb-2">
-                        {isPlayerTurn ? "AI Checkmate!" : "You Won!"}
-                      </h3>
-                      <p className="text-slate-400 mb-6 font-mono text-sm">On-chain achievement unlocked: GM Level {level}</p>
-                    </>
-                  ) : (
-                    <>
-                      <div className="w-16 h-16 bg-slate-500/20 rounded-full flex items-center justify-center mb-4">
-                        <CircleAlert className="w-8 h-8 text-slate-500" />
-                      </div>
-                      <h3 className="text-2xl font-bold text-white mb-2">Match Terminated</h3>
-                      <p className="text-slate-400 mb-6">{status === 'draw' ? "The game ended in a draw." : "You have resigned."}</p>
-                    </>
-                  )}
-                  <button 
-                    onClick={resetGame}
-                    className="w-full py-3 bg-[#0052FF] text-white font-bold rounded-lg hover:bg-blue-600 transition-colors"
-                  >
-                    New Challenge
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Chess Board Grid */}
-            <div className="grid grid-cols-8 grid-rows-8 w-[520px] h-[520px] border-4 border-[#1A1A1A]">
-              {renderBoard()}
-            </div>
-
             {/* AI Proposed Move Overlay */}
             <AnimatePresence>
               {proposedAiMove && (
@@ -442,6 +415,44 @@ export default function ChessPage() {
                 </motion.div>
               )}
             </AnimatePresence>
+
+            {/* Game Over Message */}
+            {status !== 'playing' && (
+              <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm rounded-xl">
+                <div className="bg-[#1A1A1A] border border-slate-800 p-8 rounded-2xl flex flex-col items-center text-center shadow-2xl max-w-xs">
+                  {status === 'checkmate' ? (
+                    <>
+                      <div className="w-16 h-16 bg-blue-500/20 rounded-full flex items-center justify-center mb-4">
+                        <CircleCheck className="w-8 h-8 text-blue-500" />
+                      </div>
+                      <h3 className="text-2xl font-bold text-white mb-2">
+                        {isPlayerTurn ? "AI Checkmate!" : "You Won!"}
+                      </h3>
+                      <p className="text-slate-400 mb-6 font-mono text-sm">On-chain achievement unlocked: GM Level {level}</p>
+                    </>
+                  ) : (
+                    <>
+                      <div className="w-16 h-16 bg-slate-500/20 rounded-full flex items-center justify-center mb-4">
+                        <CircleAlert className="w-8 h-8 text-slate-500" />
+                      </div>
+                      <h3 className="text-2xl font-bold text-white mb-2">Match Terminated</h3>
+                      <p className="text-slate-400 mb-6">{status === 'draw' ? "The game ended in a draw." : "You have resigned."}</p>
+                    </>
+                  )}
+                  <button 
+                    onClick={resetGame}
+                    className="w-full py-3 bg-[#0052FF] text-white font-bold rounded-lg hover:bg-blue-600 transition-colors"
+                  >
+                    New Challenge
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Chess Board Grid */}
+            <div className="grid grid-cols-8 grid-rows-8 w-[520px] h-[520px] border-4 border-[#1A1A1A]">
+              {renderBoard()}
+            </div>
           </div>
 
           <div className="mt-8 flex gap-8">

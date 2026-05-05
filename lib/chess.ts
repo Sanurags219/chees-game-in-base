@@ -1,8 +1,6 @@
 import { Chess } from 'chess.js';
 
 export function getBestMove(fen: string, level: number, excludedMoves: string[] = []) {
-  // Simple "AI" for demonstration since we can't run Stockfish easily in-browser without a worker
-  // Higher level means slightly better move selection
   const game = new Chess(fen);
   let moves = game.moves();
   
