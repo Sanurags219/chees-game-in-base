@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useMemo, useCallback } from 'react';
-import { Chess, type Square } from 'chess.js';
+import { Chess, type Square, type Move } from 'chess.js';
 import { sdk } from '@farcaster/miniapp-sdk';
 import { motion, AnimatePresence } from 'motion/react';
 import { getBestMove } from '@/lib/chess';
@@ -27,7 +27,7 @@ import { cn } from '@/lib/utils';
 export default function ChessPage() {
   const { address, isConnected } = useAccount();
   const [game, setGame] = useState(new Chess());
-  const [level, setLevel] = useState(5); // Default to middle
+  const [level, setLevel] = useState(5);
   const [moveHistory, setMoveHistory] = useState<{ san: string; from: string; to: string }[]>([]);
   const [status, setStatus] = useState<'playing' | 'checkmate' | 'draw' | 'resigned'>('playing');
   const [isAiThinking, setIsAiThinking] = useState(false);
@@ -37,6 +37,7 @@ export default function ChessPage() {
   const [proposedAiMove, setProposedAiMove] = useState<string | null>(null);
   const [deniedAiMoves, setDeniedAiMoves] = useState<string[]>([]);
   const [capturedPiece, setCapturedPiece] = useState<{ type: string; color: string; square: string } | null>(null);
+  const [legalMovesFromSelected, setLegalMovesFromSelected] = useState<Move[]>([]);
 
   useEffect(() => {
     if (errorMessage) {
@@ -74,11 +75,12 @@ export default function ChessPage() {
         
         return true;
       } else {
+        // This part usually won't be hit if we validate before calling game.move
         setErrorMessage("Illegal move attempted.");
         return false;
       }
     } catch (e) {
-      setErrorMessage("Invalid move format or illegal move.");
+      setErrorMessage("Invalid move format.");
       return false;
     }
   }, [game]);
@@ -86,7 +88,6 @@ export default function ChessPage() {
   const handleAiMove = useCallback(() => {
     if (status !== 'playing' || proposedAiMove) return;
     
-    // Simulate thinking delay
     setTimeout(() => {
       setIsAiThinking(true);
       setTimeout(() => {
@@ -112,35 +113,78 @@ export default function ChessPage() {
     if (!isPlayerTurn || status !== 'playing' || proposedAiMove) return;
 
     if (selectedSquare) {
+      if (selectedSquare === square) {
+        setSelectedSquare(null);
+        setLegalMovesFromSelected([]);
+        return;
+      }
+
+      const moves = game.moves({ square: selectedSquare as Square, verbose: true });
+      const isValidMove = moves.some(m => m.to === square);
+
+      if (!isValidMove) {
+        // Specific Error Messages
+        const pieceAtDest = game.get(square as Square);
+        if (pieceAtDest && pieceAtDest.color === 'w') {
+          // Switch selection instead of error
+          setSelectedSquare(square);
+          setLegalMovesFromSelected(game.moves({ square: square as Square, verbose: true }));
+          return;
+        }
+
+        // Why is it illegal?
+        const tempGame = new Chess(game.fen());
+        // Try any move to that square (even if illegal in terms of check)
+        const allPossibleMovesForPiece = tempGame.moves({ square: selectedSquare as Square, verbose: true });
+        const canReachButLeavesInCheck = allPossibleMovesForPiece.some(m => m.to === square);
+
+        if (canReachButLeavesInCheck) {
+          setErrorMessage("Illegal: You cannot leave your King in check!");
+        } else {
+          setErrorMessage("Illegal move: That piece cannot move there.");
+        }
+        
+        setSelectedSquare(null);
+        setLegalMovesFromSelected([]);
+        return;
+      }
+
       // Check for promotion
       const piece = game.get(selectedSquare as Square);
       const isPawn = piece?.type === 'p';
       const isPromotionRank = (piece?.color === 'w' && square[1] === '8') || (piece?.color === 'b' && square[1] === '1');
       
-      const moves = game.moves({ square: selectedSquare as Square, verbose: true });
-      const isValidMove = moves.some(m => m.to === square);
-
-      if (isValidMove && isPawn && isPromotionRank) {
+      if (isPawn && isPromotionRank) {
         setPendingPromotionMove({ from: selectedSquare, to: square });
         setSelectedSquare(null);
+        setLegalMovesFromSelected([]);
         return;
       }
 
-      const moveSuccess = makeMove({ from: selectedSquare, to: square, promotion: 'q' });
+      makeMove({ from: selectedSquare, to: square, promotion: 'q' });
       setSelectedSquare(null);
-      if (moveSuccess) return;
+      setLegalMovesFromSelected([]);
+      return;
     }
 
     const piece = game.get(square as Square);
     if (piece && piece.color === 'w') {
       setSelectedSquare(square);
-    } else {
-      setSelectedSquare(null);
+      setLegalMovesFromSelected(game.moves({ square: square as Square, verbose: true }));
+    } else if (piece && piece.color === 'b') {
+      setErrorMessage("Illegal: You cannot move your opponent's pieces.");
     }
   };
 
   const handlePromotion = (promotionPiece: string) => {
     if (pendingPromotionMove) {
+      const validPromotionPieces = ['q', 'r', 'b', 'n'];
+      if (!validPromotionPieces.includes(promotionPiece)) {
+        setErrorMessage("Invalid promotion choice selected.");
+        setPendingPromotionMove(null);
+        return;
+      }
+      
       makeMove({ 
         from: pendingPromotionMove.from, 
         to: pendingPromotionMove.to, 
@@ -200,6 +244,7 @@ export default function ChessPage() {
         const isSelected = selectedSquare === squareLabel;
         const lastMove = moveHistory[moveHistory.length - 1];
         const isLastMove = lastMove && (lastMove.from === squareLabel || lastMove.to === squareLabel);
+        const isLegalTarget = legalMovesFromSelected.some(m => m.to === squareLabel);
 
         squares.push(
           <div
@@ -210,19 +255,22 @@ export default function ChessPage() {
               "w-full h-full flex items-center justify-center text-4xl cursor-pointer transition-all duration-200 relative",
               isDark ? "bg-slate-800" : "bg-slate-400",
               isSelected && "ring-4 ring-blue-500 ring-inset z-10",
-              isLastMove && !isSelected && "bg-blue-500/30"
+              isLastMove && !isSelected && "bg-blue-500/30",
+              isLegalTarget && "after:content-[''] after:w-3 after:h-3 after:bg-blue-500/40 after:rounded-full"
             )}
           >
             {piece && (
-              <span className={cn(
-                "select-none drop-shadow-md",
-                piece.color === 'w' ? "text-white" : "text-slate-900"
-              )}>
+              <motion.span 
+                layoutId={`piece-${squareLabel}-${piece.type}`}
+                className={cn(
+                  "select-none drop-shadow-md",
+                  piece.color === 'w' ? "text-white" : "text-slate-900"
+                )}
+              >
                 {getPieceUnicode(piece.type, piece.color)}
-              </span>
+              </motion.span>
             )}
             
-            {/* Captured Piece Animation */}
             <AnimatePresence>
               {capturedPiece?.square === squareLabel && (
                 <motion.span
@@ -239,6 +287,7 @@ export default function ChessPage() {
                 </motion.span>
               )}
             </AnimatePresence>
+
             {c === 0 && <span className="absolute left-0.5 top-0.5 text-[8px] text-slate-500 font-bold uppercase">{8 - r}</span>}
             {r === 7 && <span className="absolute right-0.5 bottom-0.5 text-[8px] text-slate-500 font-bold uppercase">{String.fromCharCode(97 + c)}</span>}
           </div>
@@ -250,22 +299,15 @@ export default function ChessPage() {
 
   return (
     <div className="w-full h-screen bg-[#0A0A0A] text-slate-200 font-sans overflow-hidden flex flex-col">
-      {/* Header */}
       <header className="h-16 border-b border-slate-800 flex items-center justify-between px-8 bg-[#111111] z-50">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 bg-[#0052FF] rounded-full flex items-center justify-center">
             <Trophy className="w-4 h-4 text-white" />
           </div>
-          <h1 className="text-xl font-semibold tracking-tight text-white">BaseChess <span className="text-slate-500 font-normal ml-2">v1.1</span></h1>
+          <h1 className="text-xl font-semibold tracking-tight text-white">BaseChess <span className="text-slate-500 font-normal ml-2">v1.2</span></h1>
         </div>
         
         <div className="flex items-center gap-6">
-          <div className="flex flex-col items-end">
-            <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold">Network Status</span>
-            <span className="text-xs text-[#00FF00] flex items-center gap-1">
-              <span className="w-1.5 h-1.5 bg-[#00FF00] rounded-full animate-pulse"></span> Base Mainnet
-            </span>
-          </div>
           <Wallet>
             <ConnectWallet className="bg-[#1A1A1A] border-slate-700 h-10 px-4 py-0 rounded-lg hover:bg-[#222]">
               <div className="text-xs font-mono text-slate-400">
@@ -280,7 +322,6 @@ export default function ChessPage() {
       </header>
 
       <main className="flex-1 flex overflow-hidden">
-        {/* Left Sidebar: Levels Slider */}
         <aside className="w-64 border-r border-slate-800 bg-[#0D0D0D] p-6 flex flex-col">
           <div className="mb-6">
             <h2 className="text-[10px] uppercase tracking-[0.2em] text-slate-500 font-bold mb-6 flex items-center gap-2">
@@ -306,29 +347,15 @@ export default function ChessPage() {
                 <span>GM</span>
               </div>
             </div>
-            
-            <div className="mt-8 space-y-4">
-               <div className="p-4 bg-blue-500/5 rounded-xl border border-blue-500/10">
-                 <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-1">Bot Personality</p>
-                 <p className="text-sm font-bold text-white">
-                   {level <= 3 ? "Friendly BaseBot" : level <= 7 ? "Tactical AI" : "Grandmaster Bot"}
-                 </p>
-               </div>
-            </div>
           </div>
           
           <div className="mt-auto p-4 bg-[#151515] rounded-xl border border-slate-800">
             <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-1">Win Reward</p>
             <p className="text-xl font-bold text-white">{(level * 0.05).toFixed(2)} ETH</p>
-            <p className="text-[10px] text-blue-400 mt-2 flex items-center gap-1">
-               <Clock className="w-3 h-3" /> Rank: Level {level}
-            </p>
           </div>
         </aside>
 
-        {/* Board Area */}
         <section className="flex-1 bg-[#0A0A0A] flex flex-col items-center justify-center p-8 relative">
-          {/* Turn Indicator Overlay */}
           <div className="mb-6 flex items-center justify-center w-full relative h-10">
             <AnimatePresence mode="wait">
               <motion.div
@@ -337,24 +364,19 @@ export default function ChessPage() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 10 }}
                 className={cn(
-                  "px-6 py-2 rounded-full border flex items-center gap-3 shadow-xl transition-colors",
+                  "px-6 py-2 rounded-full border flex items-center gap-3 shadow-xl",
                   isPlayerTurn 
                     ? "bg-blue-500/10 border-blue-500 text-blue-400" 
                     : "bg-orange-500/10 border-orange-500 text-orange-400"
                 )}
               >
-                {isPlayerTurn ? (
-                  <User className="w-4 h-4 animate-pulse" />
-                ) : (
-                  <Cpu className="w-4 h-4 animate-spin" />
-                )}
+                {isPlayerTurn ? <User className="w-4 h-4" /> : <Cpu className="w-4 h-4" />}
                 <span className="text-sm font-bold tracking-widest uppercase">
                   {isPlayerTurn ? "Your Turn" : "AI Thinking..."}
                 </span>
               </motion.div>
             </AnimatePresence>
 
-            {/* Error Message */}
             <AnimatePresence>
               {errorMessage && (
                 <motion.div
@@ -371,7 +393,6 @@ export default function ChessPage() {
           </div>
 
           <div className="relative bg-[#1A1A1A] p-4 rounded-xl shadow-2xl border border-slate-800">
-            {/* AI Proposed Move Overlay */}
             <AnimatePresence>
               {proposedAiMove && (
                 <motion.div
@@ -390,16 +411,10 @@ export default function ChessPage() {
                     </h3>
                     
                     <div className="flex gap-3 w-full">
-                      <button
-                        onClick={denyAiMove}
-                        className="flex-1 py-3 bg-slate-800 hover:bg-red-500/20 text-slate-300 hover:text-red-400 border border-slate-700 hover:border-red-500/50 rounded-xl flex items-center justify-center gap-2 transition-all font-bold"
-                      >
+                      <button onClick={denyAiMove} className="flex-1 py-3 bg-slate-800 text-slate-300 border border-slate-700 rounded-xl flex items-center justify-center gap-2 font-bold">
                         <X className="w-4 h-4" /> Deny
                       </button>
-                      <button
-                        onClick={confirmAiMove}
-                        className="flex-1 py-3 bg-orange-500 hover:bg-orange-600 text-black rounded-xl flex items-center justify-center gap-2 transition-all font-bold shadow-[0_0_15px_rgba(249,115,22,0.4)]"
-                      >
+                      <button onClick={confirmAiMove} className="flex-1 py-3 bg-orange-500 text-black rounded-xl flex items-center justify-center gap-2 font-bold shadow-[0_0_15px_rgba(249,115,22,0.4)]">
                         <Check className="w-4 h-4" /> Approve
                       </button>
                     </div>
@@ -408,7 +423,6 @@ export default function ChessPage() {
               )}
             </AnimatePresence>
 
-            {/* Promotion Modal */}
             <AnimatePresence>
               {pendingPromotionMove && (
                 <motion.div
@@ -429,11 +443,9 @@ export default function ChessPage() {
                         <button
                           key={piece.type}
                           onClick={() => handlePromotion(piece.type)}
-                          className="w-16 h-16 bg-slate-800 border border-slate-700 rounded-xl flex items-center justify-center text-4xl hover:bg-blue-500/20 hover:border-blue-500 transition-all group active:scale-90"
+                          className="w-16 h-16 bg-slate-800 border border-slate-700 rounded-xl flex items-center justify-center text-4xl hover:bg-blue-500/20 hover:border-blue-500 transition-all group"
                         >
-                          <span className="group-hover:scale-110 transition-transform">
-                            {getPieceUnicode(piece.type, 'w')}
-                          </span>
+                          {getPieceUnicode(piece.type, 'w')}
                         </button>
                       ))}
                     </div>
@@ -442,132 +454,55 @@ export default function ChessPage() {
               )}
             </AnimatePresence>
 
-            {/* Game Over Message */}
             {status !== 'playing' && (
               <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm rounded-xl">
                 <div className="bg-[#1A1A1A] border border-slate-800 p-8 rounded-2xl flex flex-col items-center text-center shadow-2xl max-w-xs">
-                  {status === 'checkmate' ? (
-                    <>
-                      <div className="w-16 h-16 bg-blue-500/20 rounded-full flex items-center justify-center mb-4">
-                        <CircleCheck className="w-8 h-8 text-blue-500" />
-                      </div>
-                      <h3 className="text-2xl font-bold text-white mb-2">
-                        {isPlayerTurn ? "AI Checkmate!" : "You Won!"}
-                      </h3>
-                      <p className="text-slate-400 mb-6 font-mono text-sm">On-chain achievement unlocked: GM Level {level}</p>
-                    </>
-                  ) : (
-                    <>
-                      <div className="w-16 h-16 bg-slate-500/20 rounded-full flex items-center justify-center mb-4">
-                        <CircleAlert className="w-8 h-8 text-slate-500" />
-                      </div>
-                      <h3 className="text-2xl font-bold text-white mb-2">Match Terminated</h3>
-                      <p className="text-slate-400 mb-6">{status === 'draw' ? "The game ended in a draw." : "You have resigned."}</p>
-                    </>
-                  )}
-                  <button 
-                    onClick={resetGame}
-                    className="w-full py-3 bg-[#0052FF] text-white font-bold rounded-lg hover:bg-blue-600 transition-colors"
-                  >
-                    New Challenge
+                  <h3 className="text-2xl font-bold text-white mb-2">Match Over</h3>
+                  <p className="text-slate-400 mb-6">{status.toUpperCase()}</p>
+                  <button onClick={resetGame} className="w-full py-3 bg-[#0052FF] text-white font-bold rounded-lg">
+                    New Game
                   </button>
                 </div>
               </div>
             )}
 
-            {/* Chess Board Grid */}
             <div className="grid grid-cols-8 grid-rows-8 w-[520px] h-[520px] border-4 border-[#1A1A1A]">
               {renderBoard()}
             </div>
           </div>
-
-          <div className="mt-8 flex gap-8">
-            <div id="player-profile" className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-slate-800 rounded-full flex items-center justify-center border border-slate-700">
-                <User className="w-5 h-5 text-slate-400" />
-              </div>
-              <div>
-                <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Player</p>
-                <p className="text-sm font-bold text-white">{isConnected ? address?.slice(0, 10) + '...' : 'Anonymous'}</p>
-              </div>
-            </div>
-            
-            <div className="w-[1px] h-10 bg-slate-800"></div>
-
-            <div id="ai-profile" className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-slate-800 rounded-full flex items-center justify-center border border-slate-700">
-                <Cpu className="w-5 h-5 text-slate-400" />
-              </div>
-              <div>
-                <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Opponent</p>
-                <p className="text-sm font-bold text-white">BaseBot Level {level}</p>
-              </div>
-            </div>
-          </div>
         </section>
 
-        {/* Right Sidebar: Game History */}
         <aside className="w-72 border-l border-slate-800 bg-[#0D0D0D] flex flex-col">
           <div className="p-6 flex-1 overflow-y-auto">
             <h2 className="text-[10px] uppercase tracking-[0.2em] text-slate-500 font-bold mb-4 flex items-center gap-2">
-              <History className="w-3 h-3" /> Game Activity
+              <History className="w-3 h-3" /> Activity
             </h2>
             <div className="space-y-3">
-              {moveHistory.length === 0 ? (
-                <div className="text-center py-10">
-                  <p className="text-xs text-slate-600 italic">No moves recorded yet.</p>
+              {moveHistory.map((move, i) => (
+                <div key={i} className="flex justify-between items-center text-xs">
+                  <span className="text-slate-500">#{i + 1} Move</span>
+                  <span className="text-white font-mono bg-[#1A1A1A] px-2 py-0.5 rounded border border-slate-800">
+                    {move.from} → {move.to} <span className="text-blue-500 ml-1 font-bold">{move.san}</span>
+                  </span>
                 </div>
-              ) : (
-                moveHistory.map((move, i) => (
-                  <motion.div 
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    key={i} 
-                    className="flex justify-between items-center text-xs group"
-                  >
-                    <span className="text-slate-500">#{i + 1} Move</span>
-                    <span className="text-white font-mono bg-[#1A1A1A] px-2 py-0.5 rounded border border-slate-800 group-hover:border-blue-500/50 transition-colors">
-                      {move.from} → {move.to} <span className="text-blue-500 ml-1 font-bold">{move.san}</span>
-                    </span>
-                    <span className="text-blue-500/50 text-[10px]">Confirmed</span>
-                  </motion.div>
-                ))
-              )}
+              ))}
             </div>
           </div>
 
           <div className="p-6 border-t border-slate-800 space-y-3">
-             <button 
-              onClick={resetGame}
-              className="w-full py-3 bg-transparent border border-slate-700 text-slate-400 hover:text-white rounded-lg flex items-center justify-center gap-2 transition-all hover:bg-slate-800"
-            >
-              <RotateCcw className="w-4 h-4" /> Restart Game
+             <button onClick={resetGame} className="w-full py-3 bg-transparent border border-slate-700 text-slate-400 rounded-lg flex items-center justify-center gap-2">
+              <RotateCcw className="w-4 h-4" /> Restart
             </button>
-            <button 
-              onClick={() => setStatus('resigned')}
-              className="w-full py-3 bg-transparent border border-slate-800 text-slate-400 hover:text-red-400 hover:border-red-500/30 rounded-lg flex items-center justify-center gap-2 transition-all hover:bg-red-500/5"
-            >
-              <Flag className="w-4 h-4" /> Resign Match
-            </button>
-             <button 
-              className="w-full py-3 bg-[#0052FF] hover:bg-blue-600 text-white font-bold rounded-lg transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-900/20 active:scale-95"
-            >
-              Submit Move On-Chain
+            <button onClick={() => setStatus('resigned')} className="w-full py-3 bg-transparent border border-slate-700 text-slate-400 rounded-lg flex items-center justify-center gap-2">
+              <Flag className="w-4 h-4" /> Resign
             </button>
           </div>
         </aside>
       </main>
-
-      {/* Footer */}
-      <footer className="h-10 bg-[#111111] border-t border-slate-800 px-8 flex items-center justify-between">
-        <div className="text-[10px] text-slate-500 uppercase tracking-widest flex items-center gap-4">
-          <span>Gas: <span className="text-blue-400 font-mono">0.0001 ETH</span></span>
-          <span className="w-[1px] h-3 bg-slate-800"></span>
-          <span>Network: <span className="text-white">Stable</span></span>
-        </div>
-        <div className="text-[10px] text-slate-500">
-          © 2024 Base Game Labs. Security Verified by Base Protocol.
-        </div>
+      
+      <footer className="h-10 bg-[#111111] border-t border-slate-800 px-8 flex items-center justify-between text-[10px] text-slate-500">
+        <div>Network: <span className="text-white">Base Mainnet</span></div>
+        <div>© 2024 Base Chess Labs</div>
       </footer>
     </div>
   );

@@ -34,12 +34,6 @@ function evaluatePosition(game: Chess): number {
     }
   }
 
-  // Basic king safety check (very simple)
-  if (game.hasOwnProperty('has_castle_rights')) {
-    // Note: chess.js v1 beta has different types, accessing carefully
-    // Using a simplified version for now
-  }
-
   return score;
 }
 
@@ -48,41 +42,33 @@ export function getBestMove(fen: string, level: number, excludedMoves: string[] 
   const moves = game.moves({ verbose: true });
   const turn = game.turn();
   
-  // Filter out excluded moves
   const validMoves = moves.filter(m => !excludedMoves.includes(m.san));
   
   if (validMoves.length === 0) return null;
 
-  // Level 1: Random
   if (level === 1) {
     return validMoves[Math.floor(Math.random() * validMoves.length)].san;
   }
 
-  // Score each move
   const scoredMoves = validMoves.map(move => {
     const tempGame = new Chess(fen);
     tempGame.move(move);
     
     let score = evaluatePosition(tempGame);
 
-    // Bonus for checks
     if (tempGame.isCheck()) {
       score += turn === 'w' ? 10 : -10;
     }
 
-    // Bonus for castling
     if (move.flags.includes('k') || move.flags.includes('q')) {
       score += turn === 'w' ? 15 : -15;
     }
 
-    // Bonus for development
     if (move.piece !== 'p' && (move.from[1] === '1' || move.from[1] === '8')) {
       score += turn === 'w' ? 5 : -5;
     }
 
-    // Penalty for moving king (unless castling or late game)
     if (move.piece === 'k' && !move.flags.includes('k') && !move.flags.includes('q')) {
-      // Check piece count to estimate game phase
       const pieceCount = tempGame.board().flat().filter(p => p !== null).length;
       if (pieceCount > 20) {
         score += turn === 'w' ? -10 : 10;
@@ -92,12 +78,10 @@ export function getBestMove(fen: string, level: number, excludedMoves: string[] 
     return { san: move.san, score };
   });
 
-  // Sort moves based on the side's perspective
   scoredMoves.sort((a, b) => {
     return turn === 'w' ? b.score - a.score : a.score - b.score;
   });
 
-  // selectionPoolSize decreases as level increases
   const selectionPoolSize = Math.max(1, Math.floor(6 - (level / 2)));
   const pool = scoredMoves.slice(0, selectionPoolSize);
   
