@@ -36,6 +36,7 @@ export default function ChessPage() {
   const [pendingPromotionMove, setPendingPromotionMove] = useState<{ from: string; to: string } | null>(null);
   const [proposedAiMove, setProposedAiMove] = useState<string | null>(null);
   const [deniedAiMoves, setDeniedAiMoves] = useState<string[]>([]);
+  const [capturedPiece, setCapturedPiece] = useState<{ type: string; color: string; square: string } | null>(null);
 
   useEffect(() => {
     if (errorMessage) {
@@ -55,6 +56,14 @@ export default function ChessPage() {
     try {
       const result = game.move(move);
       if (result) {
+        if (result.captured) {
+          setCapturedPiece({ 
+            type: result.captured, 
+            color: result.color === 'w' ? 'b' : 'w',
+            square: result.to 
+          });
+          setTimeout(() => setCapturedPiece(null), 1000);
+        }
         setGame(new Chess(game.fen()));
         setMoveHistory(prev => [...prev, { san: result.san, from: result.from, to: result.to }]);
         setErrorMessage(null);
@@ -212,6 +221,24 @@ export default function ChessPage() {
                 {getPieceUnicode(piece.type, piece.color)}
               </span>
             )}
+            
+            {/* Captured Piece Animation */}
+            <AnimatePresence>
+              {capturedPiece?.square === squareLabel && (
+                <motion.span
+                  initial={{ opacity: 1, scale: 1, y: 0 }}
+                  animate={{ opacity: 0, scale: 1.8, y: -40, rotate: 15 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.7, ease: "easeOut" }}
+                  className={cn(
+                    "absolute pointer-events-none select-none text-4xl z-30 drop-shadow-[0_0_10px_rgba(255,255,255,0.5)]",
+                    capturedPiece.color === 'w' ? "text-white" : "text-slate-900"
+                  )}
+                >
+                  {getPieceUnicode(capturedPiece.type, capturedPiece.color)}
+                </motion.span>
+              )}
+            </AnimatePresence>
             {c === 0 && <span className="absolute left-0.5 top-0.5 text-[8px] text-slate-500 font-bold uppercase">{8 - r}</span>}
             {r === 7 && <span className="absolute right-0.5 bottom-0.5 text-[8px] text-slate-500 font-bold uppercase">{String.fromCharCode(97 + c)}</span>}
           </div>
