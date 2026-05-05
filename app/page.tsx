@@ -31,6 +31,15 @@ export default function ChessPage() {
   const [status, setStatus] = useState<'playing' | 'checkmate' | 'draw' | 'resigned'>('playing');
   const [isAiThinking, setIsAiThinking] = useState(false);
   const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [pendingPromotionMove, setPendingPromotionMove] = useState<{ from: string; to: string } | null>(null);
+
+  useEffect(() => {
+    if (errorMessage) {
+      const timer = setTimeout(() => setErrorMessage(null), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [errorMessage]);
 
   useEffect(() => {
     sdk.actions.ready().catch(console.error);
@@ -45,16 +54,20 @@ export default function ChessPage() {
       if (result) {
         setGame(new Chess(game.fen()));
         setMoveHistory(prev => [...prev, { san: result.san, from: result.from, to: result.to }]);
+        setErrorMessage(null);
         
         if (game.isCheckmate()) setStatus('checkmate');
         else if (game.isDraw()) setStatus('draw');
         
         return true;
+      } else {
+        setErrorMessage("Illegal move attempted.");
+        return false;
       }
     } catch (e) {
+      setErrorMessage("Invalid move format or illegal move.");
       return false;
     }
-    return false;
   }, [game]);
 
   const handleAiMove = useCallback(() => {
@@ -83,6 +96,21 @@ export default function ChessPage() {
     if (!isPlayerTurn || status !== 'playing') return;
 
     if (selectedSquare) {
+      // Check if move is a promotion
+      const piece = game.get(selectedSquare as any);
+      const isPawn = piece?.type === 'p';
+      const isPromotionRank = (piece?.color === 'w' && square[1] === '8') || (piece?.color === 'b' && square[1] === '1');
+      
+      // Verify if it's a valid move first
+      const moves = game.moves({ square: selectedSquare as any, verbose: true });
+      const isValidMove = moves.some(m => m.to === square);
+
+      if (isValidMove && isPawn && isPromotionRank) {
+        setPendingPromotionMove({ from: selectedSquare, to: square });
+        setSelectedSquare(null);
+        return;
+      }
+
       const moveSuccess = makeMove({ from: selectedSquare, to: square, promotion: 'q' });
       setSelectedSquare(null);
       if (moveSuccess) return;
@@ -92,6 +120,18 @@ export default function ChessPage() {
     if (piece && piece.color === 'w') {
       setSelectedSquare(square);
     } else {
+      setSelectedSquare(null);
+    }
+  };
+
+  const handlePromotion = (promotionPiece: string) => {
+    if (pendingPromotionMove) {
+      makeMove({ 
+        from: pendingPromotionMove.from, 
+        to: pendingPromotionMove.to, 
+        promotion: promotionPiece 
+      });
+      setPendingPromotionMove(null);
       setSelectedSquare(null);
     }
   };
@@ -251,6 +291,21 @@ export default function ChessPage() {
                 </span>
               </motion.div>
             </AnimatePresence>
+
+            {/* Error Message */}
+            <AnimatePresence>
+              {errorMessage && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10, scale: 0.9 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -10, scale: 0.9 }}
+                  className="absolute mt-16 bg-red-500/10 border border-red-500 text-red-500 px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 shadow-[0_0_20px_rgba(239,68,68,0.2)] z-10"
+                >
+                  <CircleAlert className="w-3 h-3" />
+                  {errorMessage}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
           <div className="relative bg-[#1A1A1A] p-4 rounded-xl shadow-2xl border border-slate-800">
@@ -291,6 +346,40 @@ export default function ChessPage() {
             <div className="grid grid-cols-8 grid-rows-8 w-[520px] h-[520px] border-4 border-[#1A1A1A]">
               {renderBoard()}
             </div>
+
+            {/* Promotion Modal */}
+            <AnimatePresence>
+              {pendingPromotionMove && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  className="absolute inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm rounded-xl"
+                >
+                  <div className="bg-[#1A1A1A] border border-blue-500/50 p-6 rounded-2xl shadow-[0_0_30px_rgba(0,82,255,0.2)] flex flex-col items-center">
+                    <p className="text-xs font-bold uppercase tracking-[0.2em] text-blue-400 mb-4">Choose Promotion</p>
+                    <div className="flex gap-4">
+                      {[
+                        { type: 'q', label: 'Queen' },
+                        { type: 'r', label: 'Rook' },
+                        { type: 'b', label: 'Bishop' },
+                        { type: 'n', label: 'Knight' }
+                      ].map((piece) => (
+                        <button
+                          key={piece.type}
+                          onClick={() => handlePromotion(piece.type)}
+                          className="w-16 h-16 bg-slate-800 border border-slate-700 rounded-xl flex items-center justify-center text-4xl hover:bg-blue-500/20 hover:border-blue-500 transition-all group active:scale-90"
+                        >
+                          <span className="group-hover:scale-110 transition-transform">
+                            {getPieceUnicode(piece.type, 'w')}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
           <div className="mt-8 flex gap-8">
