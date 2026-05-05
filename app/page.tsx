@@ -85,20 +85,19 @@ export default function ChessPage() {
         if (bestMove) {
           setProposedAiMove(bestMove);
         } else if (deniedAiMoves.length > 0) {
-          setErrorMessage("All AI suggestions rejected. Bot forced to move.");
+          setErrorMessage("All proposals rejected. AI resetting...");
           setDeniedAiMoves([]);
-          // Implicitly handleAiMove will trigger again next turn check or we can just wait
         }
         setIsAiThinking(false);
       }, 800 + Math.random() * 1000);
-    }, 10);
+    }, 100);
   }, [game, level, status, deniedAiMoves, proposedAiMove]);
 
   useEffect(() => {
     if (!isPlayerTurn && status === 'playing' && !proposedAiMove && !isAiThinking) {
       handleAiMove();
     }
-  }, [isPlayerTurn, handleAiMove, status, proposedAiMove, isAiThinking]);
+  }, [isPlayerTurn, status, proposedAiMove, isAiThinking, handleAiMove]);
 
   const onSquareClick = (square: string) => {
     if (!isPlayerTurn || status !== 'playing' || proposedAiMove) return;
