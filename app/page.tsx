@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Chess, type Square, type Move } from 'chess.js';
 import { sdk } from '@farcaster/miniapp-sdk';
 import { motion, AnimatePresence } from 'motion/react';
@@ -16,7 +16,8 @@ import {
   User,
   Cpu,
   Settings2,
-  ChevronRight
+  ChevronRight,
+  Undo2
 } from 'lucide-react';
 import { ConnectWallet, Wallet, WalletDropdown, WalletDropdownDisconnect } from '@coinbase/onchainkit/wallet';
 import { useAccount } from 'wagmi';
@@ -26,7 +27,7 @@ export default function ChessPage() {
   const { address, isConnected } = useAccount();
   const [game, setGame] = useState(new Chess());
   const [level, setLevel] = useState(5);
-  const [moveHistory, setMoveHistory] = useState<{ san: string; from: string; to: string }[]>([]);
+  const [moveHistory, setMoveHistory] = useState<{ san: string; from: string; to: string; fen: string }[]>([]);
   const [status, setStatus] = useState<'playing' | 'checkmate' | 'draw' | 'resigned'>('playing');
   const [isAiThinking, setIsAiThinking] = useState(false);
   const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
@@ -68,8 +69,10 @@ export default function ChessPage() {
           });
           setTimeout(() => setCapturedPiece(null), 1000);
         }
-        setGame(new Chess(game.fen()));
-        setMoveHistory(prev => [...prev, { san: result.san, from: result.from, to: result.to }]);
+        
+        const newFen = game.fen();
+        setGame(new Chess(newFen));
+        setMoveHistory(prev => [...prev, { san: result.san, from: result.from, to: result.to, fen: newFen }]);
         setErrorMessage(null);
         setDeniedAiMoves([]); 
         
@@ -206,6 +209,29 @@ export default function ChessPage() {
     setProposedAiMove(null);
     setErrorMessage("AI move rejected. Bot is reconsidering...");
   };
+
+  const undoLastMove = useCallback(() => {
+    if (moveHistory.length === 0) return;
+    
+    // In human vs AI, if it's currently AI's turn (or they are thinking), 
+    // undoing one move gets back to the point after human move.
+    // If it's human's turn, undoing one move gets back to the point after AI move, 
+    // and undoing two moves gets back to before the human move.
+    
+    const newHistory = [...moveHistory];
+    newHistory.pop();
+    
+    const lastFen = newHistory.length > 0 ? newHistory[newHistory.length - 1].fen : 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+    
+    setGame(new Chess(lastFen));
+    setMoveHistory(newHistory);
+    setStatus('playing');
+    setProposedAiMove(null);
+    setDeniedAiMoves([]);
+    setSelectedSquare(null);
+    setLegalMovesFromSelected([]);
+    setErrorMessage("Last move reverted.");
+  }, [moveHistory]);
 
   const resetGame = () => {
     setGame(new Chess());
@@ -344,6 +370,16 @@ export default function ChessPage() {
                 <span>GM</span>
               </div>
             </div>
+          </div>
+
+          <div className="mt-auto border-t border-slate-800 pt-6">
+             <button 
+               onClick={undoLastMove} 
+               disabled={moveHistory.length === 0}
+               className="w-full py-3 bg-slate-800/50 border border-slate-700 text-slate-300 rounded-xl flex items-center justify-center gap-2 font-bold hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+             >
+                <Undo2 className="w-4 h-4" /> Undo Move
+             </button>
           </div>
         </aside>
 

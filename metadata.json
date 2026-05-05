@@ -1,6 +1,6 @@
 {
   "name": "BaseChess",
-  "description": "An on-chain chess game built on Base with AI opponents and real-time capture animations.",
+  "description": "An on-chain chess game built on Base with AI opponents, real-time capture animations, and undo functionality.",
   "requestFramePermissions": [
     "camera",
     "microphone"
