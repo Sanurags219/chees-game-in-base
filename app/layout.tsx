@@ -9,10 +9,10 @@ const inter = Inter({
 });
 
 export async function generateMetadata(): Promise<Metadata> {
-  const appUrl = process.env.APP_URL || 'https://ais-dev-nql373fydx2jsoswwhvbxm-615601803900.asia-southeast1.run.app';
+  const appUrl = process.env.NEXT_PUBLIC_URL || 'https://ais-dev-nql373fydx2jsoswwhvbxm-615601803900.asia-southeast1.run.app';
   return {
     title: 'BaseChess',
-    description: 'On-chain chess on Base',
+    description: 'On-chain chess on Base with user-friendly pawn promotion.',
     other: {
       'fc:miniapp': JSON.stringify({
         version: 'next',

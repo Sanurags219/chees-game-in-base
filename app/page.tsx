@@ -10,15 +10,13 @@ import {
   History, 
   RotateCcw, 
   Flag,
-  CircleCheck,
   CircleAlert,
   Check,
   X,
-  ShieldCheck,
-  Clock,
   User,
   Cpu,
-  Settings2
+  Settings2,
+  ChevronRight
 } from 'lucide-react';
 import { ConnectWallet, Wallet, WalletDropdown, WalletDropdownDisconnect } from '@coinbase/onchainkit/wallet';
 import { useAccount } from 'wagmi';
@@ -60,7 +58,6 @@ export default function ChessPage() {
         if (result.captured) {
           let captureSquare = result.to;
           if (result.flags.includes('e')) {
-            // En Passant: captured pawn is on the rank of the attacker's original square
             captureSquare = result.to.charAt(0) + result.from.charAt(1);
           }
 
@@ -81,11 +78,11 @@ export default function ChessPage() {
         
         return true;
       } else {
-        setErrorMessage("Illegal move attempted.");
+        setErrorMessage("Illegal move. Rules don't permit that motion.");
         return false;
       }
     } catch (e) {
-      setErrorMessage("Invalid move format.");
+      setErrorMessage("Error: Movement blocked by check or illegal path.");
       return false;
     }
   }, [game]);
@@ -140,9 +137,9 @@ export default function ChessPage() {
         const canReachButLeavesInCheck = allPossibleMovesForPiece.some(m => m.to === square);
 
         if (canReachButLeavesInCheck) {
-          setErrorMessage("Illegal: You cannot leave your King in check!");
+          setErrorMessage("Illegal: Your King would be in Check!");
         } else {
-          setErrorMessage("Illegal move: That piece cannot move there.");
+          setErrorMessage("Illegal Move: Invalid path for this piece.");
         }
         
         setSelectedSquare(null);
@@ -304,14 +301,14 @@ export default function ChessPage() {
           <div className="w-8 h-8 bg-[#0052FF] rounded-full flex items-center justify-center">
             <Trophy className="w-4 h-4 text-white" />
           </div>
-          <h1 className="text-xl font-semibold tracking-tight text-white">BaseChess <span className="text-slate-500 font-normal ml-2">v1.2</span></h1>
+          <h1 className="text-xl font-semibold tracking-tight text-white">BaseChess <span className="text-slate-500 font-normal ml-2 text-xs">MINI-APP</span></h1>
         </div>
         
         <div className="flex items-center gap-6">
           <Wallet>
             <ConnectWallet className="bg-[#1A1A1A] border-slate-700 h-10 px-4 py-0 rounded-lg hover:bg-[#222]">
               <div className="text-xs font-mono text-slate-400">
-                {isConnected ? address?.slice(0, 6) + '...' + address?.slice(-4) : 'Connect Wallet'}
+                {isConnected ? address?.slice(0, 6) + '...' + address?.slice(-4) : 'Connect'}
               </div>
             </ConnectWallet>
             <WalletDropdown>
@@ -366,7 +363,7 @@ export default function ChessPage() {
                 )}
               >
                 {isPlayerTurn ? <User className="w-4 h-4" /> : <Cpu className="w-4 h-4" />}
-                <span className="text-sm font-bold tracking-widest uppercase">
+                <span className="text-sm font-bold tracking-widest uppercase text-center">
                   {isPlayerTurn ? "Your Turn" : "AI Thinking..."}
                 </span>
               </motion.div>
@@ -396,17 +393,17 @@ export default function ChessPage() {
                   exit={{ opacity: 0, scale: 0.95 }}
                   className="absolute inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm rounded-xl"
                 >
-                  <div className="bg-[#1A1A1A] border border-orange-500/50 p-6 rounded-2xl flex flex-col items-center">
+                  <div className="bg-[#1A1A1A] border border-orange-500/50 p-6 rounded-2xl shadow-[0_0_30px_rgba(249,115,22,0.2)] flex flex-col items-center">
                     <p className="text-xs font-bold uppercase tracking-[0.2em] text-orange-400 mb-1">AI Proposal</p>
                     <h3 className="text-2xl font-mono text-white mb-6">
                       Move <span className="text-orange-500">{proposedAiMove}</span>?
                     </h3>
                     
                     <div className="flex gap-3 w-full">
-                      <button onClick={denyAiMove} className="flex-1 py-3 bg-slate-800 text-slate-300 border border-slate-700 rounded-xl flex items-center justify-center gap-2 font-bold">
+                      <button onClick={denyAiMove} className="flex-1 py-3 bg-slate-800 text-slate-300 border border-slate-700 rounded-xl flex items-center justify-center gap-2 font-bold hover:bg-slate-700">
                         <X className="w-4 h-4" /> Deny
                       </button>
-                      <button onClick={confirmAiMove} className="flex-1 py-3 bg-orange-500 text-black rounded-xl flex items-center justify-center gap-2 font-bold shadow-[0_0_15px_rgba(249,115,22,0.4)]">
+                      <button onClick={confirmAiMove} className="flex-1 py-3 bg-orange-500 text-black rounded-xl flex items-center justify-center gap-2 font-bold shadow-[0_0_15px_rgba(249,115,22,0.4)] hover:bg-orange-600">
                         <Check className="w-4 h-4" /> Approve
                       </button>
                     </div>
@@ -421,21 +418,48 @@ export default function ChessPage() {
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.95 }}
-                  className="absolute inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm rounded-xl"
+                  className="absolute inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-md rounded-xl"
                 >
-                  <div className="bg-[#1A1A1A] border border-blue-500/50 p-6 rounded-2xl flex flex-col items-center">
-                    <p className="text-xs font-bold uppercase tracking-[0.2em] text-blue-400 mb-4">Choose Promotion</p>
-                    <div className="flex gap-4">
-                      {['q', 'r', 'b', 'n'].map((type) => (
+                  <div className="bg-[#1A1A1A] border border-blue-500/50 p-8 rounded-3xl shadow-[0_0_40px_rgba(0,82,255,0.3)] flex flex-col items-center max-w-[340px]">
+                    <div className="w-12 h-12 bg-blue-500/20 rounded-full flex items-center justify-center mb-6">
+                      <ChevronRight className="w-6 h-6 text-blue-500 rotate-[-90deg]" />
+                    </div>
+                    <h3 className="text-xl font-bold text-white mb-2">Pawn Promotion</h3>
+                    <p className="text-xs text-slate-400 text-center mb-8 uppercase tracking-widest leading-relaxed">
+                      Your pawn has reached the final rank. Choose its new form.
+                    </p>
+                    
+                    <div className="grid grid-cols-2 gap-4 w-full">
+                      {[
+                        { type: 'q', label: 'Queen' },
+                        { type: 'r', label: 'Rook' },
+                        { type: 'b', label: 'Bishop' },
+                        { type: 'n', label: 'Knight' }
+                      ].map((piece) => (
                         <button
-                          key={type}
-                          onClick={() => handlePromotion(type)}
-                          className="w-16 h-16 bg-slate-800 border border-slate-700 rounded-xl flex items-center justify-center text-4xl hover:bg-blue-500/20 hover:border-blue-500 transition-all font-bold"
+                          key={piece.type}
+                          onClick={() => handlePromotion(piece.type)}
+                          className="flex flex-col items-center justify-center p-4 bg-slate-800 border border-slate-700 rounded-2xl hover:bg-blue-500/20 hover:border-blue-500 transition-all group"
                         >
-                          {getPieceUnicode(type, 'w')}
+                          <span className="text-4xl mb-2 group-hover:scale-110 transition-transform">
+                            {getPieceUnicode(piece.type, 'w')}
+                          </span>
+                          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 group-hover:text-blue-400">
+                            {piece.label}
+                          </span>
                         </button>
                       ))}
                     </div>
+                    
+                    <button 
+                      onClick={() => {
+                        setPendingPromotionMove(null);
+                        setErrorMessage("Promotion cancelled.");
+                      }}
+                      className="mt-6 text-[10px] uppercase font-bold text-slate-600 hover:text-slate-400 tracking-widest px-4 py-2"
+                    >
+                      Cancel Move
+                    </button>
                   </div>
                 </motion.div>
               )}
@@ -445,7 +469,7 @@ export default function ChessPage() {
               <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm rounded-xl">
                 <div className="bg-[#1A1A1A] border border-slate-800 p-8 rounded-2xl flex flex-col items-center text-center shadow-2xl max-w-xs">
                   <h3 className="text-2xl font-bold text-white mb-2">Match Over</h3>
-                  <p className="text-slate-400 mb-6">{status.toUpperCase()}</p>
+                  <p className="text-slate-400 mb-6 font-mono tracking-widest">{status.toUpperCase()}</p>
                   <button onClick={resetGame} className="w-full py-3 bg-[#0052FF] text-white font-bold rounded-lg hover:bg-blue-600 transition-colors">
                     New Game
                   </button>
@@ -467,12 +491,13 @@ export default function ChessPage() {
             <div className="space-y-3">
               {moveHistory.map((move, i) => (
                 <div key={i} className="flex justify-between items-center text-xs">
-                  <span className="text-slate-500">#{i + 1} Move</span>
+                  <span className="text-slate-500">#{i + 1}</span>
                   <span className="text-white font-mono bg-[#1A1A1A] px-2 py-0.5 rounded border border-slate-800">
                     {move.from} → {move.to} <span className="text-blue-500 ml-1 font-bold">{move.san}</span>
                   </span>
                 </div>
               ))}
+              {moveHistory.length === 0 && <p className="text-[10px] text-slate-700 italic">No moves yet...</p>}
             </div>
           </div>
 
@@ -488,8 +513,11 @@ export default function ChessPage() {
       </main>
       
       <footer className="h-10 bg-[#111111] border-t border-slate-800 px-8 flex items-center justify-between text-[10px] text-slate-500">
-        <div>Network: <span className="text-white">Base Mainnet</span></div>
-        <div>© 2024 Base Chess Labs</div>
+        <div className="flex gap-4">
+          <span>Network: <span className="text-white">Base</span></span>
+          <span>Status: <span className="text-green-500">Live</span></span>
+        </div>
+        <div>© 2024 Base Chess Mini-App</div>
       </footer>
     </div>
   );
