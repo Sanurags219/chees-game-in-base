@@ -59,16 +59,18 @@ export default function ChessPage() {
 
   const handleAiMove = useCallback(() => {
     if (status !== 'playing') return;
-    setIsAiThinking(true);
     
     // Simulate thinking delay
     setTimeout(() => {
-      const bestMove = getBestMove(game.fen(), level);
-      if (bestMove) {
-        makeMove(bestMove);
-      }
-      setIsAiThinking(false);
-    }, 800 + Math.random() * 1000);
+      setIsAiThinking(true);
+      setTimeout(() => {
+        const bestMove = getBestMove(game.fen(), level);
+        if (bestMove) {
+          makeMove(bestMove);
+        }
+        setIsAiThinking(false);
+      }, 800 + Math.random() * 1000);
+    }, 10);
   }, [game, level, makeMove, status]);
 
   useEffect(() => {
