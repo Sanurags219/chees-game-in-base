@@ -12,6 +12,9 @@ import {
   Flag,
   CircleCheck,
   CircleAlert,
+  CircleX,
+  Check,
+  X,
   Loader2,
   ChevronRight,
   ShieldCheck,
@@ -33,6 +36,8 @@ export default function ChessPage() {
   const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [pendingPromotionMove, setPendingPromotionMove] = useState<{ from: string; to: string } | null>(null);
+  const [proposedAiMove, setProposedAiMove] = useState<string | null>(null);
+  const [deniedAiMoves, setDeniedAiMoves] = useState<string[]>([]);
 
   useEffect(() => {
     if (errorMessage) {
@@ -55,6 +60,7 @@ export default function ChessPage() {
         setGame(new Chess(game.fen()));
         setMoveHistory(prev => [...prev, { san: result.san, from: result.from, to: result.to }]);
         setErrorMessage(null);
+        setDeniedAiMoves([]); // Clear denied moves on successful move
         
         if (game.isCheckmate()) setStatus('checkmate');
         else if (game.isDraw()) setStatus('draw');
@@ -77,14 +83,33 @@ export default function ChessPage() {
     setTimeout(() => {
       setIsAiThinking(true);
       setTimeout(() => {
-        const bestMove = getBestMove(game.fen(), level);
+        const bestMove = getBestMove(game.fen(), level, deniedAiMoves);
         if (bestMove) {
-          makeMove(bestMove);
+          setProposedAiMove(bestMove);
+        } else if (deniedAiMoves.length > 0) {
+          // If all proposed moves were denied, AI gives up or forced to move
+          setErrorMessage("All AI suggestions rejected. Bot forced to move.");
+          setDeniedAiMoves([]);
         }
         setIsAiThinking(false);
       }, 800 + Math.random() * 1000);
     }, 10);
-  }, [game, level, makeMove, status]);
+  }, [game, level, status, deniedAiMoves]);
+
+  const confirmAiMove = () => {
+    if (proposedAiMove) {
+      makeMove(proposedAiMove);
+      setProposedAiMove(null);
+    }
+  };
+
+  const denyAiMove = () => {
+    if (proposedAiMove) {
+      setDeniedAiMoves(prev => [...prev, proposedAiMove]);
+    }
+    setProposedAiMove(null);
+    setErrorMessage("AI move rejected. Bot is reconsidering...");
+  };
 
   useEffect(() => {
     if (!isPlayerTurn && status === 'playing') {
@@ -346,6 +371,43 @@ export default function ChessPage() {
             <div className="grid grid-cols-8 grid-rows-8 w-[520px] h-[520px] border-4 border-[#1A1A1A]">
               {renderBoard()}
             </div>
+
+            {/* AI Proposed Move Overlay */}
+            <AnimatePresence>
+              {proposedAiMove && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  className="absolute inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm rounded-xl"
+                >
+                  <div className="bg-[#1A1A1A] border border-orange-500/50 p-6 rounded-2xl shadow-[0_0_30px_rgba(249,115,22,0.2)] flex flex-col items-center">
+                    <div className="w-12 h-12 bg-orange-500/20 rounded-full flex items-center justify-center mb-4">
+                      <Cpu className="w-6 h-6 text-orange-500" />
+                    </div>
+                    <p className="text-xs font-bold uppercase tracking-[0.2em] text-orange-400 mb-1">AI Proposal</p>
+                    <h3 className="text-2xl font-mono text-white mb-6">
+                      Move <span className="text-orange-500">{proposedAiMove}</span>?
+                    </h3>
+                    
+                    <div className="flex gap-3 w-full">
+                      <button
+                        onClick={denyAiMove}
+                        className="flex-1 py-3 bg-slate-800 hover:bg-red-500/20 text-slate-300 hover:text-red-400 border border-slate-700 hover:border-red-500/50 rounded-xl flex items-center justify-center gap-2 transition-all font-bold"
+                      >
+                        <X className="w-4 h-4" /> Deny
+                      </button>
+                      <button
+                        onClick={confirmAiMove}
+                        className="flex-1 py-3 bg-orange-500 hover:bg-orange-600 text-black rounded-xl flex items-center justify-center gap-2 transition-all font-bold shadow-[0_0_15px_rgba(249,115,22,0.4)]"
+                      >
+                        <Check className="w-4 h-4" /> Approve
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* Promotion Modal */}
             <AnimatePresence>
