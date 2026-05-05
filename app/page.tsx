@@ -75,7 +75,6 @@ export default function ChessPage() {
         
         return true;
       } else {
-        // This part usually won't be hit if we validate before calling game.move
         setErrorMessage("Illegal move attempted.");
         return false;
       }
@@ -123,18 +122,14 @@ export default function ChessPage() {
       const isValidMove = moves.some(m => m.to === square);
 
       if (!isValidMove) {
-        // Specific Error Messages
         const pieceAtDest = game.get(square as Square);
         if (pieceAtDest && pieceAtDest.color === 'w') {
-          // Switch selection instead of error
           setSelectedSquare(square);
           setLegalMovesFromSelected(game.moves({ square: square as Square, verbose: true }));
           return;
         }
 
-        // Why is it illegal?
         const tempGame = new Chess(game.fen());
-        // Try any move to that square (even if illegal in terms of check)
         const allPossibleMovesForPiece = tempGame.moves({ square: selectedSquare as Square, verbose: true });
         const canReachButLeavesInCheck = allPossibleMovesForPiece.some(m => m.to === square);
 
@@ -149,7 +144,6 @@ export default function ChessPage() {
         return;
       }
 
-      // Check for promotion
       const piece = game.get(selectedSquare as Square);
       const isPawn = piece?.type === 'p';
       const isPromotionRank = (piece?.color === 'w' && square[1] === '8') || (piece?.color === 'b' && square[1] === '1');
@@ -348,11 +342,6 @@ export default function ChessPage() {
               </div>
             </div>
           </div>
-          
-          <div className="mt-auto p-4 bg-[#151515] rounded-xl border border-slate-800">
-            <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-1">Win Reward</p>
-            <p className="text-xl font-bold text-white">{(level * 0.05).toFixed(2)} ETH</p>
-          </div>
         </aside>
 
         <section className="flex-1 bg-[#0A0A0A] flex flex-col items-center justify-center p-8 relative">
@@ -401,10 +390,7 @@ export default function ChessPage() {
                   exit={{ opacity: 0, scale: 0.95 }}
                   className="absolute inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm rounded-xl"
                 >
-                  <div className="bg-[#1A1A1A] border border-orange-500/50 p-6 rounded-2xl shadow-[0_0_30px_rgba(249,115,22,0.2)] flex flex-col items-center">
-                    <div className="w-12 h-12 bg-orange-500/20 rounded-full flex items-center justify-center mb-4">
-                      <Cpu className="w-6 h-6 text-orange-500" />
-                    </div>
+                  <div className="bg-[#1A1A1A] border border-orange-500/50 p-6 rounded-2xl flex flex-col items-center">
                     <p className="text-xs font-bold uppercase tracking-[0.2em] text-orange-400 mb-1">AI Proposal</p>
                     <h3 className="text-2xl font-mono text-white mb-6">
                       Move <span className="text-orange-500">{proposedAiMove}</span>?
@@ -431,21 +417,16 @@ export default function ChessPage() {
                   exit={{ opacity: 0, scale: 0.95 }}
                   className="absolute inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm rounded-xl"
                 >
-                  <div className="bg-[#1A1A1A] border border-blue-500/50 p-6 rounded-2xl shadow-[0_0_30px_rgba(0,82,255,0.2)] flex flex-col items-center">
+                  <div className="bg-[#1A1A1A] border border-blue-500/50 p-6 rounded-2xl flex flex-col items-center">
                     <p className="text-xs font-bold uppercase tracking-[0.2em] text-blue-400 mb-4">Choose Promotion</p>
                     <div className="flex gap-4">
-                      {[
-                        { type: 'q', label: 'Queen' },
-                        { type: 'r', label: 'Rook' },
-                        { type: 'b', label: 'Bishop' },
-                        { type: 'n', label: 'Knight' }
-                      ].map((piece) => (
+                      {['q', 'r', 'b', 'n'].map((type) => (
                         <button
-                          key={piece.type}
-                          onClick={() => handlePromotion(piece.type)}
-                          className="w-16 h-16 bg-slate-800 border border-slate-700 rounded-xl flex items-center justify-center text-4xl hover:bg-blue-500/20 hover:border-blue-500 transition-all group"
+                          key={type}
+                          onClick={() => handlePromotion(type)}
+                          className="w-16 h-16 bg-slate-800 border border-slate-700 rounded-xl flex items-center justify-center text-4xl hover:bg-blue-500/20 hover:border-blue-500 transition-all font-bold"
                         >
-                          {getPieceUnicode(piece.type, 'w')}
+                          {getPieceUnicode(type, 'w')}
                         </button>
                       ))}
                     </div>
@@ -459,7 +440,7 @@ export default function ChessPage() {
                 <div className="bg-[#1A1A1A] border border-slate-800 p-8 rounded-2xl flex flex-col items-center text-center shadow-2xl max-w-xs">
                   <h3 className="text-2xl font-bold text-white mb-2">Match Over</h3>
                   <p className="text-slate-400 mb-6">{status.toUpperCase()}</p>
-                  <button onClick={resetGame} className="w-full py-3 bg-[#0052FF] text-white font-bold rounded-lg">
+                  <button onClick={resetGame} className="w-full py-3 bg-[#0052FF] text-white font-bold rounded-lg hover:bg-blue-600 transition-colors">
                     New Game
                   </button>
                 </div>
@@ -490,10 +471,10 @@ export default function ChessPage() {
           </div>
 
           <div className="p-6 border-t border-slate-800 space-y-3">
-             <button onClick={resetGame} className="w-full py-3 bg-transparent border border-slate-700 text-slate-400 rounded-lg flex items-center justify-center gap-2">
+             <button onClick={resetGame} className="w-full py-3 bg-transparent border border-slate-700 text-slate-400 rounded-lg flex items-center justify-center gap-2 hover:bg-slate-800 transition-colors">
               <RotateCcw className="w-4 h-4" /> Restart
             </button>
-            <button onClick={() => setStatus('resigned')} className="w-full py-3 bg-transparent border border-slate-700 text-slate-400 rounded-lg flex items-center justify-center gap-2">
+            <button onClick={() => setStatus('resigned')} className="w-full py-3 bg-transparent border border-slate-700 text-slate-400 rounded-lg flex items-center justify-center gap-2 hover:bg-red-500/5 hover:border-red-500/30 transition-colors">
               <Flag className="w-4 h-4" /> Resign
             </button>
           </div>
